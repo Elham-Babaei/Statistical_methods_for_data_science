@@ -1,0 +1,639 @@
+---
+title: "Homework 2 Group C"
+author: "Giulio Crognaletti, Marianna Corsano, Irene Ferfoglia, Elham Babaei"
+date: "29/11/2020"
+output:
+  html_document:
+    css: style.css
+    toc: yes
+institute: University of Trieste
+fontsize: 10pt
+---
+
+# Bootstrap exercise:
+
+Refer to the theoretical lecture about bootstrap:
+
+1. Compute the bootstrap-based confidence interval for the score dataset using the studentized method.
+
+2. Compute bootstrap-based confidence intervals for the score dataset using the boot package.
+
+First of all. let us load the package and define some useful functions:
+```{r}
+
+score <- read.table("student_scores.txt", header = TRUE)
+
+#jackkinfe procedure (variance)
+jack <- function(data) {
+  n <- nrow(data)
+  val <- vapply(1:n,function(k){psi(data[-k,])},FUN.VALUE = 0.0)
+  ((n-1)/n)*sum((val-mean(val))^2)
+}
+
+#calculation of psi function
+psi <- function(data) {
+  eig <- eigen(cor(data))$values
+  max(eig)/sum(eig)
+}
+
+psi_2 <- function(data, indices) {
+  eig <- eigen(cor(data[indices,]))$values
+  c(max(eig)/sum(eig),jack(data[indices,]))
+}
+
+psi_3 <- function(data, indices) {
+  eig <- eigen(cor(data[indices,]))$values
+  c(max(eig)/sum(eig),bootvar(data[indices,],50))
+}
+
+bootvar <- function(data,N) {
+  var(vapply(1:N,function(k) {
+    idx <- sample(1:nrow(data),n,replace = TRUE)
+    psi(score[idx,])
+  }, FUN.VALUE = 0.0))
+}
+
+```
+The function "jack()" calculates the jackknife based variance of the observed quantity, and similarly the function "bootvar()" does the same but using the bootstrap method. These functions are later needed to estimate the single bootstrap sample observation variance (for the studentized method). The "psi_n()" functions implement different versions of the function defined in the theoretical lesson, and are designed as the boot package requires to be fed to "boot()".
+```{r psi_3}
+#observed psi
+psi_obs <- psi(score)
+
+#calculation of bootstrap fictitious observations and errors
+B <- 5000
+n <- nrow(score)
+
+# bootstrap based variance
+bootstrap_quantities <- vapply(1:B,function(k){
+  idx <- sample(1:n,n,replace = TRUE)
+  psi_3(score,idx)
+}, FUN.VALUE = c(0.0,0.0))
+
+bootstrap_obs <- bootstrap_quantities[1,]
+errors <-sqrt(bootstrap_quantities[2,])
+
+#applying studentized method
+z_star <- (bootstrap_obs-psi_obs)/errors
+se_psi_obs <- sd(bootstrap_obs)
+quant <- quantile(z_star, prob=c(0.975, 0.025))
+
+confidence1 <- psi_obs - se_psi_obs*as.vector(quant)
+cat ("studentised method - bootstrap variance - CI: ", confidence1, " \n")
+
+
+# jackknife based variance
+bootstrap_quantities <- vapply(1:B,function(k){
+  idx <- sample(1:n,n,replace = TRUE)
+  psi_2(score,idx)
+}, FUN.VALUE = c(0.0,0.0))
+
+bootstrap_obs <- bootstrap_quantities[1,]
+errors <-sqrt(bootstrap_quantities[2,])
+
+#applying studentized method
+z_star <- (bootstrap_obs-psi_obs)/errors
+se_psi_obs <- sd(bootstrap_obs)
+quant <- quantile(z_star, prob=c(0.975, 0.025))
+
+confidence2 <- psi_obs - se_psi_obs*as.vector(quant)
+cat ("studentised method - jackknife variance - CI: ", confidence2, " \n")
+
+```
+
+Similar results can be obtained using the boot package:
+```{r}
+require(boot)
+
+samples1 <- boot(score,psi_3,B,stype = "i")
+ci1 <- boot.ci(samples1)
+
+samples2 <- boot(score,psi_2,B,stype = "i")
+ci2 <- boot.ci(samples2)
+
+cat ("boot function - bootstrap variance - CI : ", "\n")
+print (ci1)
+
+cat ("boot function - jackknife variance - CI : ", " \n")
+print(ci2)
+
+```
+The results show that by using both theoretical studentized method and boot function in R, we obtain a smaller  confidence interval of our statistic of interest when we use bootstrap to calculate the variance of bootstrap estimated statistic. This might be due to the fact that jackknife method deletes one observation and this can lead to somehow larger confidence interval (which is not preferred) especially if the omitted observation is significant.
+
+# Lab Excercises
+
+## Ex. 1
+Compute the MLE and the observed information matrix for a gamma model with parameters shape $\alpha$ and scale $\beta$.
+
+Solution:
+Let $y=(y_1,…,y_n)$ be a sample of i.i.d. values from a gamma distribution, Y∼Ga(,β), with parameter $\theta=(\alpha,\beta)$ and density function:
+\begin{equation}
+f(y;\alpha,\beta)=\frac{\beta^\alpha y^{\alpha-1}e^{-\beta y}}{\Gamma(\alpha)}, \quad y\ge 0
+\end{equation}
+where $\beta, \alpha>0$ and $\Gamma(\alpha)=\int_{0}^{+\infty}\beta^\alpha y^{\alpha-1} \, dy$ (Here the shape and rate version of the distribution is used).
+
+First of all we have to compute the likelihood, which is defined as:
+\begin{equation}
+L(\alpha, \gamma; y)=\prod_{i=1}^n L_i=\prod_{i=1}^nf(y_i;\alpha,\beta)
+\end{equation}
+And consequently the log-likelihood:
+\begin{align}
+l(\alpha,\beta;y) &= \log(\prod_{i=1}^n L_i)=\sum_{i=1}^n\log f(y_i;\alpha,\beta) \\
+&= n\alpha\log(\beta)+(\alpha-1)\sum_{i=1}^n\log(y_i)+\beta\sum_{i=1}^ny_i-n\log(\Gamma(\alpha))
+\end{align} 
+
+In r code, the log-likelihood function is defined as follows:
+```{r}
+log_like_gamma<- function(data,param){
+  -sum(dgamma(data, shape=param[1], rate=param[2], log=T))
+}
+```
+
+Now we can compute the maximum likelihood estimates $\hat{\alpha}$ and $\hat{\beta}$. This can be done by equating to zero these two derivatives:
+\begin{align}
+\frac{\partial}{\partial\alpha}l(\alpha,\beta;y)&=n\log(\beta)+\sum_{i=1}^n\log(y_i)-n\frac{\Gamma'(\alpha)}{\Gamma(\alpha)} \\
+\frac{\partial}{\partial\beta}l(\alpha,\beta;y)&=\frac{n\alpha}{\beta}-\sum_{i=1}^n y_i
+\end{align}
+For the second equation:
+\begin{equation}
+\frac{\partial}{\partial\beta}l(\alpha,\beta;y)=\frac{n\alpha}{\beta}-\sum_{i=1}^n y_i=0 \iff \beta=\frac{n\alpha}{\sum_{i=1}^n y_i}
+\end{equation}
+Substituting this result in the first equation, we obtain:
+\begin{equation}
+n\log(\frac{n\alpha}{\sum_{i=1}^n})+\sum_{i=1}^n\log(y_i)-n\frac{\Gamma'(\alpha)}{\Gamma(\alpha)}=0\\
+n\log(n\alpha)-n\log(\sum_{i=1}^n y_i)+\sum_{i=1}^n \log(y_i) - n\psi(\alpha)=0\\
+\log(\alpha)-\psi(\alpha)-\log(\frac{\sum_{i=1}^n}{n})+\frac{1}{n}\sum_{i=1}^n\log(y_i)=0
+\end{equation}
+Where $\psi(\alpha)$ is the digamma function, defined as $\psi(\alpha)=\frac{\Gamma'(\alpha)}{\Gamma(\alpha)}$.
+This equation has to be solved numerically.
+
+```{r}
+n<-150
+y<-rgamma(n, shape = 1, rate = 0.5)
+```
+
+
+```{r}
+alphahat<-uniroot(
+  function(x) log(x)-digamma(x)-log(mean(y))+(1/n)*sum(log(y)), c(1e-5,50) )$root
+
+betahat<-alphahat/(mean(y))
+
+gamma_mle<-c(alphahat,betahat)
+gamma_mle
+```
+As we can see the estimated parameters match very well with the true values of $1$ and $0.5$ .
+
+To compute the observed information matrix:
+\begin{equation}
+J(\theta;y)=-\frac{\partial^2l(\theta;y)}{\partial\theta\partial\theta^T}
+\end{equation}
+let $\theta(\alpha,\beta)$ be the bidimensional vector.
+
+```{r}
+jhat <- matrix(NA, nrow=2, ncol=2)
+jhat[1,1]<- n*trigamma(alphahat)
+jhat[1,2]<- jhat[2,1]<- -n/betahat
+jhat[2,2]<- (n*alphahat)/(betahat^2)
+jhat
+```
+
+## Ex. 2
+The Wald confidence interval with level $1−\alpha$ is defined as:
+\begin{equation}
+\hat{\gamma}± z_{1-\alpha/2}j_P(\hat{\gamma})^{−1/2}.
+\end{equation}
+Compute the Wald confidence interval of level 0.95, plot the results, and evaluate via simulation the empirical coverage of the confidence interval.
+
+Firts of all, let's recall the definitions of the log-likelihood and the profile log-likelihood functions:
+```{r}
+log_lik_weibull <- function(data, param) {
+  -sum(dweibull(data, shape = param[1], scale = param[2], log = TRUE))
+}
+
+log_lik_weibull_profile  <- function(data, gamma){
+  beta.gamma <- mean(data^gamma)^(1/gamma)
+  log_lik_weibull( data, c(gamma, beta.gamma) )
+}
+
+log_lik_weibull_profile_v <- Vectorize(log_lik_weibull_profile, 'gamma')
+
+```
+Then we can generate the dataset and compute the Wald confidence interval of level 0.95
+```{r}
+n <- 15
+y <- rweibull(n, shape = 7, scale = 155)
+
+weib.mle <- optim(c(1,1), fn=log_lik_weibull, hessian=T, method='L-BFGS-B',lower=rep(1e-7,2),upper=rep(Inf,2), data=y)
+
+#computes the mle as well as its hessian (just a second derivative in this case)
+mle_hess <-function(y) {
+  result <- optim(1, fn=log_lik_weibull_profile, hessian=T, method='L-BFGS-B',lower=1e-7, data=y)
+  c(result$par,result$hessian)
+}
+
+#computes the interval using information obtained above
+conf_int <- function(mle_hess,alpha) { mle_hess[1] + c(-1,1)*qnorm(1-alpha/2)*mle_hess[2]^(-0.5) }
+
+conf_int_95 <- conf_int(mle_hess(y),0.05)
+conf_int_95
+```
+And the plot 
+```{r}
+plot(function(x) -log_lik_weibull_profile_v(data=y, x)+weib.mle$value,
+     from=0.1,to=15,xlab=expression(gamma),
+     ylab='profile relative log likelihood', ylim=c(-8,0))
+library(RColorBrewer)
+plotclr <- brewer.pal(6,"YlOrRd")
+fun_plot <- function(x){-log_lik_weibull_profile_v(data=y, x)+weib.mle$value}
+
+# cord.x <- c(conf_int_95[1],seq(conf_int_95[1],conf_int_95[2],0.01),conf_int_95[2])
+# cord.y <- c(-8.3,fun_plot(seq(conf_int_95[1],conf_int_95[2],0.01)),-8.3)
+# polygon(cord.x,cord.y,col=plotclr[3], border = NA )
+
+segments(conf_int_95[1],-8,conf_int_95[2],-8, col=3)
+segments(conf_int_95[1],-8.3,conf_int_95[1],fun_plot(conf_int_95[1]), col=3, lty=2)
+segments(conf_int_95[2],-8.3,conf_int_95[2],fun_plot(conf_int_95[2]), col=3, lty=2)
+text(12.3,-0.3,"95% Wald confidence interval", col=3)
+```
+Lastly, we can compute the empirical coverage of the confidence interval by simulation of several datasets:
+```{r}
+M<-1000
+n<-15
+
+mat.ci <- vapply(1:M,function(k){
+  y<-rweibull(n,shape=7, scale=155)
+  conf_int(mle_hess(y),0.05)
+}, FUN.VALUE = c(0.0,0.0))
+
+paste(mean(mat.ci[1,] < 7 & mat.ci[2,] > 7)*100,"%")
+```
+## Ex. 3
+Exercise 3. Repeat the steps above —write the profile log-likelihood, plot it and find the deviance confidence intervals— considering this time $\gamma$ as a nuisance parameter and $\beta$ as the parameter of interest.
+
+```{r}
+log_lik_weibull <- function( data, param){
+  -sum(dweibull(data, scale = param[1], shape = param[2], log = TRUE))
+}
+set.seed(777)
+n <- 15
+y <- rweibull(n, scale = 155, shape = 7)
+weib.y.mle <- optim(c(1,1), fn=log_lik_weibull, hessian=T, method='L-BFGS-B',
+                     lower=rep(1e-7,2), upper=rep(Inf,2), data=y)
+ gamma <- seq(0.1, 15, length=100)
+ beta <- seq(100,200, length=100)
+ parvalues <- expand.grid(beta,gamma)
+ llikvalues <- apply(parvalues, 1, log_lik_weibull, data=y)
+ llikvalues <- matrix(-llikvalues, nrow=length(beta), ncol=length(gamma),
+ byrow=F)
+ conf.levels <- c(0,0.5,0.75,0.9,0.95,0.99)
+ 
+ #contour plot
+ contour(beta, gamma, llikvalues-max(llikvalues),
+ levels=-qchisq(conf.levels, 2)/2,
+ xlab=expression(beta),
+ labels=as.character(conf.levels),
+ ylab=expression(gamma))
+ title('Weibull profile log-likelihood')
+
+ gamma.beta<- sapply(beta,function(x) uniroot(function(z) (n/z)-n*log(x)+sum(log(y))-sum(((y/x)^z)*log(y/x)), c(1e-5,15))$root)
+ lines(beta, gamma.beta, lty='dashed',col=2)
+ points(weib.y.mle$par[1],weib.y.mle$par[2])
+```
+
+For what concerns the deviance confidence interval;
+```{r}
+log_lik_weibull_profile  <- function(data, beta){
+  gamma.beta <- uniroot(function(x) (n/x)-n*log(beta)+sum(log(data))-sum(((data/beta)^x)*log(data/beta)), c(1e-5,15))$root
+ log_lik_weibull( data, c(beta, gamma.beta) )
+}
+
+log_lik_weibull_profile_v <- Vectorize(log_lik_weibull_profile, 'beta')
+
+plot(function(x) -log_lik_weibull_profile_v(data=y, x)+weib.y.mle$value,
+     from=100,to=200,xlab=expression(beta),
+     ylab='profile relative log likelihood', ylim=c(-8,0))
+ 
+conf.level <- 0.95
+abline(h=-qchisq(conf.level,1)/2,lty='dashed',col=2)
+ 
+lrt.ci1 <- uniroot(function(x) -log_lik_weibull_profile_v(y,x)+
+                     weib.y.mle$value+
+                     qchisq(conf.level,1)/2, 
+                   c(100,weib.y.mle$par[1]))$root
+lrt.ci1 <- c(lrt.ci1, uniroot(function(x) -log_lik_weibull_profile_v(y,x) + 
+                                weib.y.mle$value + qchisq(conf.level,1)/2,
+                              c(weib.y.mle$par[1],200))$root) 
+segments( lrt.ci1[1],-qchisq(conf.level,1)/2, lrt.ci1[1],
+          -log_lik_weibull_profile_v(y, lrt.ci1[1]), col="red", lty=2)
+segments( lrt.ci1[2],-qchisq(conf.level,1)/2, lrt.ci1[2],
+          -log_lik_weibull_profile_v(y, lrt.ci1[2]), col="red", lty=2)
+
+points(lrt.ci1[1], -qchisq(0.95,1)/2, pch=16, col=2, cex=1.5)
+points(lrt.ci1[2], -qchisq(0.95,1)/2, pch=16, col=2, cex=1.5)
+
+segments( lrt.ci1[1], -8.1, lrt.ci1[2], -8.1, col="red", lty =1, lwd=2  )
+text(190,-0.3,"95% Deviance CI",col=2)
+```
+
+## Ex. 4
+In $\mathsf{sim}$ in the code above, you find the MCMC output which allows to approximate the posterior distribution of our parameter of interest with $S$ draws of $\theta$. Plot the empirical cumulative distribution function and compare it with the theoretical cumulative distribution function of the posterior distribution.
+
+``` {r}
+#input values
+#true mean
+theta_sample <- 2
+#likelihood variance
+sigma2 <- 2
+#sample size
+n <- 10
+#prior mean
+mu <- 7
+#prior variance
+tau2 <- 2
+
+#generate some data
+set.seed(123)
+y <- rnorm(n,theta_sample, sqrt(sigma2))
+
+#posterior mean
+mu_star <- ((1/tau2)*mu+(n/sigma2)*mean(y))/( (1/tau2)+(n/sigma2))
+#posterior standard deviation
+sd_star <- sqrt(1/( (1/tau2)+(n/sigma2)))
+
+library(rstan)
+#launch Stan model
+data<- list(N=n, y=y, sigma =sqrt(sigma2), mu = mu, tau = sqrt(tau2))
+fit <- stan(file="normal.stan", data = data, chains = 4, iter=2000)
+#extract Stan output
+sim <- extract(fit)
+
+```
+
+``` {r, warning = FALSE}
+
+library(MASS)
+
+mcmc_theta <- sim$theta
+
+hist.scott(mcmc_theta)
+lines(seq(min(mcmc_theta), max(mcmc_theta), 0.01),
+      dnorm(seq(min(mcmc_theta), max(mcmc_theta), 0.01), mu_star, sd_star), col = "red", lwd = 2)
+
+#quantile plot
+
+#plot(qnorm(seq(0.01, 0.99, 0.001), mu_star, sd_star),as.vector(quantile(mcmc_theta, seq(0.01,0.99,0.001))))
+
+qqnorm(distribution = function(x) qnorm(x, mu_star, sd_star), y = mcmc_theta, col=2)
+# تابع لازم نیست
+qqnorm(y=mcmc_theta, col=4)
+qqline(y = mcmc_theta)
+
+# empirical cdf
+plot(ecdf(mcmc_theta), main=" cdf")
+# theoritical cdf
+curve(pnorm(x,mu_star, sd_star), xlim=c(1,4), add=TRUE, col=2)
+```
+Here we can compare the two distributions, the simulated one and the theoretical. They seem to resemble each other, and in particular the ecdf and the cdf of normal distriution basically coincide.
+
+## Ex. 5
+Launch the following line of $\mathsf{R}$ code:*
+
+```{r, echo=TRUE} 
+posterior <- as.array(fit)
+```
+
+Use now the $\mathsf{bayesplot}$ package. Read the help and produce for this example, using the object ```posterior```, the following plots:*
+
+- posterior intervals.
+- posterior areas.
+- marginal posterior distributions for the parameters.
+Quickly comment.
+
+```{r}
+library(bayesplot)
+library(ggplot2)
+mcmc_intervals(posterior, pars= "theta") + ggtitle("Posterior interval for theta")
+```
+The thick line shows the 50% interval, the thin one the 90% interval. The point is the posterior median. It corresponds with the density plot in terms of mean. The thin lines are the tails of the distribution.
+```{r}
+mcmc_areas(posterior, pars= "theta", prob = 0.8) + ggtitle("Posterior area for theta")
+```
+This plot shows the uncertainty interval as a shaded area under the estimated posterior density curve. 
+```{r}
+mcmc_hist(posterior,  pars= "theta", binwidth = 0.1) + ggtitle("Marginal posterior distribution for theta")
+mcmc_hist_by_chain(posterior,  pars= "theta", binwidth = 0.1) + ggtitle("Marginal posterior distribution for theta, by chain")
+```
+Having only one parameter, this histogram and the posterior area plotted above are basically the same graph. The simulatio is succesful, and the posterior correctly resembles a bell shaped curve.
+
+## Ex. 6 
+Suppose you receive $n = 15$ phone calls in a day, and you want to build a model to assess their average length. Your likelihood for each call length is $y_i \sim \mathsf{Exponential}(\lambda)$.  Now, you have to choose the prior $\pi(\lambda)$. Please, tell which of these priors is adequate to describe the problem, and provide a short motivation for each of them:
+
+1. $\pi(\lambda)= \mathsf{Beta}(4,2)$;
+
+2. $\pi(\lambda)= \mathsf{Normal}(1,2)$;
+
+3. $\pi(\lambda)=\mathsf{Gamma}(4,2)$;
+
+Now, compute your posterior as $\pi(\lambda|y)\propto L(\lambda;y)\pi(\lambda)$ for the selected prior. If your first choice was correct, you will be able to compute it analitically.
+
+1. A Beta distribution would only support values between 0 and 1, while $\lambda$ could be greater than 1 based on the considered time unit.
+
+2. A Normal distribution with mean 1 and average 2 wouldn't be suitable since it could go negative.
+
+3. So, a good choice as prior distribution in this case is a Gamma distribution: according to what we know from Poisson Process in Queuing Theory, in this case the calls are happening based on Poisson distribution and the time interval between each two calls is distributed as exponential.  
+We know that Gamma distribution is one of the distributions that is used for waiting times. In this case, $\lambda$ as the rate of calls determines the average waiting time between calls; the larger $\lambda$ the lower waiting time between calls and viceversa. So it seems that Gamma distribution would be suitable to describe $\lambda$.
+
+Posterior: $$\begin{align} \pi(\lambda|y)&\propto L(\lambda;y)\pi(\lambda) \\ 
+&\propto \bigg[\prod_{i=1}^{15}\lambda e^{-\lambda y_i} \bigg] \bigg[\frac{2^4\lambda^{4-1}e^{-2\lambda}}{\int_{0}^{\infty}\lambda^{4-1} \, e^{-\lambda}\ d\lambda}\bigg]    \\
+&\propto \bigg[\lambda^{15} e^{-\lambda \sum_{i=1}^{15} y_{i} } \bigg] \bigg[\frac{16\lambda^{3}e^{-2\lambda}}{\int_{0}^{\infty}\lambda^{3} \, e^{-\lambda} \ d\lambda}\bigg]
+ \\ &\propto \bigg[\lambda^{15} e^{-15\lambda \bar y }\bigg] \bigg[\frac{16\lambda^{3}e^{-2\lambda}}{6}\bigg] 
+ \\ &\propto \bigg[\lambda^{15} e^{-15\lambda \bar y }\bigg] \bigg[\frac{8}{3}\lambda^{3}e^{-2\lambda} \bigg]
+ \\ &\propto \lambda^{15} e^{-15\lambda \bar y } \ \lambda^{3}e^{-2\lambda} \propto \lambda^{18} e^{-\lambda (2+15 \bar y)} 
+ \end{align} $$
+ 
+ In conclusion, $$\pi(\lambda|y) \sim Gamma (18+1, 2-15 \bar y)$$
+
+*Note* In this case, we considered the Gamma distribution with (shape parameter, rate parameter).
+
+## Ex. 7
+Go to this link: [rstan](https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started), and follow the instructions to download and install the $\mathsf{rstan}$ library. Once you did it succesfully, open the file model called $\mathsf{biparametric.stan}$, and replace the line:
+
+$$\mathsf{ target+=cauchy\_lpdf(sigma| 0, 2.5);} $$
+with the following one:
+
+$$\mathsf{ target+=uniform\_lpdf(sigma| 0.1, 10);} $$
+
+Which prior are you now assuming for your parameter $\sigma$? Reproduce the same plots as above and briefly comment.
+
+``` {r, warning=FALSE, message = FALSE, results='hide', echo=TRUE}
+n <- 10
+#true mean
+theta_sample <- 2
+#likelihood variance
+sigma2 <- 2
+
+set.seed(123)
+y <- rnorm(n,theta_sample, sqrt(sigma2)) 
+
+
+#launch biparametric Stan model
+library(rstan)
+data<- list(N=n, y=y, a=-10, b=10)
+fit <- stan(file="bipar.stan", data = data, chains = 4, iter=2000,refresh=-1)
+
+#extract stan output for biparametric model
+
+sim <- extract(fit)
+posterior_biv <- as.matrix(fit)
+
+theta_est <- mean(sim$theta)
+sigma_est <- mean(sim$sigma)
+c(theta_est, sigma_est)
+print(fit)
+traceplot(fit, pars=c("theta", "sigma"))
+
+library("bayesplot")
+library("rstanarm")
+library("ggplot2")
+plot_title <- ggtitle("Posterior distributions",
+                      "with medians and 80% intervals")
+
+mcmc_areas(posterior_biv, 
+           pars = c("theta","sigma"), 
+           prob = 0.8) + plot_title
+
+
+```
+
+We are considering $\sigma \sim \mathsf{Unif}(0.1,10)$ as the prior distribution for $\sigma$.
+The posterior estimated values for parameters $\theta$ and $\sigma$ using Markov Chain simulation are $2.09$ and $1.58$ respectively.
+The `traceplot` and `fit` object ($Rhat=1$) shows that the chains of the algorithm have reached convergence and the posterior model is properly fitted. 
+The MCMC-area plots show 80% credibility intervals and median for both parameters. 
+
+The traceplot shows that the value of $\sigma^2$ during the simulation varies a bit more than the simulation done during the Laboratory, this suggests higher variance in the posterior. The final results are anyway very similar.
+
+
+## Ex. 8
+Simulate a sample of size n=14 from a Bernoulli distribution parameter p=0.5.
+
+Looking at the Stan code for the other models, write a short Stan Beta-Binomial model, where p has a Beta(a,b) prior with a=3, b=3.
+
+extract the posterior distribution with the function extract();
+
+produce some plots with the bayesplot package and comment.
+
+compute analitically the posterior distribution and compare it with the Stan distribution.
+
+
+``` {r, warning=FALSE, message = FALSE, results='hide', echo=TRUE}
+
+library(rstan)
+n <- 14
+set.seed(123)
+x<- sum(rbinom(n,size=1,0.5))
+
+
+data2 <- list(N=n, x=x,a=3,b=3)
+fit2 <- stan(file="Beta_Binom.stan", data = data2, chains = 4, iter=2000,
+  refresh=-1)
+
+#extract stan output for Binomial-Beta model
+
+sim2 <- extract(fit2)
+posterior <- as.matrix(fit2)
+
+p_est <- mean(sim2$p)
+p_est
+print(fit2)
+
+traceplot(fit2, pars=c("p"))
+
+library("bayesplot")
+library("rstanarm")
+library("ggplot2")
+
+#MCMC areas
+par (mfrow=c(1,3), oma=c(0,0,0,0))
+
+plot_title <- ggtitle("Posterior distributions",
+                      "with medians and 80% intervals")
+mcmc_areas(posterior, 
+           pars = "p", 
+           prob = 0.8) + plot_title
+
+plot_title <- ggtitle("Posterior distributions",
+                      "with medians and 90% intervals")
+mcmc_areas(posterior, 
+           pars = "p", 
+           prob = 0.9) + plot_title
+
+plot_title <- ggtitle("Posterior distributions",
+                      "with medians and 95% intervals")
+mcmc_areas(posterior, 
+           pars = "p", 
+           prob = 0.95) + plot_title
+
+
+```
+
+The posterior mean is about $0.60$ for the parameter of Binomial distribution. The MCMC-area plots, the one with  95% credibility interval in particular,resemble Beta distribution as they are almost bell shaped with a longer tail on left hand side.
+
+
+``` {r, warning=FALSE, message = FALSE, results='hide', echo=TRUE}
+plot(density(sim2$p, adj=2), xlim=c(0,1), col ="blue", lwd=2, lty =1, xlab="x", main="posterior distribution")
+
+obs <- x
+
+curve(dbeta(x,3,3), xlim=c(0,1), ylim=c(0,4), col="red", lty=1,lwd=2, ylab="density", add =T)
+curve(dbeta(x,obs,n-obs),xlim=c(0,1), add = TRUE)
+#here the likelihood is proportional to p^x*(1-p)^(n-x) so it's proportional to a beta distribution 
+#with alpha = x and beta = n-x
+
+legend(0.1, 3, c( "Stan Posterior", "Prior", "Likelihood"), 
+  c("blue","red","black" ), lty=c(1,2),lwd=c(1,1), cex=0.8)
+```
+
+Also the above graph shows that posterior distribution is asymmetric and close to Beta distribution. Here is also possible so see and compare the prior and likelihood with the stan simulated posterior.
+
+
+Now we compute analytically the posterior distribution. we know that the data comes from a Bernoulli distribution and the prior is distributed as Beta. 
+
+$$\begin{matrix}
+y_{i} \sim Bernoulli(p) & p \in [0, 1] \\
+y=\sum_{i=1}^{n}y_{i} \sim Binomial (n,p)\\
+p \sim Beta(a,b)& \\
+\end{matrix}$$
+
+x is the number of successes in Bernoulli experiences. Then:
+
+$$L(p;x) = {n\choose x}  p^x(1-p)^{n-x} \propto Beta(x,n-x) \\
+L(p) \propto p^x (1-p)^{n-x}\\
+\pi(p) \propto  p^{a -1} (1-p)^{b-1} \\
+\pi(p|x) \propto \pi(p) L(p)\\
+\pi(p|x) \propto p^{x+a-1} (1-p)^{b+n-x-1}$$
+
+So the posterior distribution is Beta with parameters $(x+a,b+n-x)$
+
+$$\pi(p|y) = \frac{\Gamma (x+a-1)} {\Gamma (b+n-x-1)} p^{x+a-1}(1-p)^{b+n-x-1}  $$
+
+``` {r, warning=FALSE, message = FALSE, results='hide', echo=TRUE}
+plot(density(sim2$p, adj=2), xlim=c(0,1), col ="blue", lwd=2, lty =1, xlab="x", main="posterior distribution")
+curve(dbeta(x,obs+3,3+n-obs), xlim=c(0,1), col="red", lty=1,lwd=2, ylab="density", add =T)
+
+legend(0.1, 3, c( "Stan Posterior", "Analytical Posterior"), 
+  c("blue","red" ), lty=c(1,2),lwd=c(1,1), cex=0.8)
+```
+
+We can say that the two graphs look similar indeed, and they will become more and more similar when the "iter" parameter in stan functions is raised. Example:
+
+``` {r, warning=FALSE, message = FALSE, results='hide', echo=TRUE}
+fit2 <- stan(file="Beta_Binom.stan", data = data2, chains = 4, iter=80000, #<- iter is now larger
+  refresh=-1)
+sim2 <- extract(fit2)
+
+plot(density(sim2$p, adj=2), xlim=c(0,1), col ="blue", lwd=2, lty =1, xlab="x", main="posterior distribution")
+curve(dbeta(x,obs+3,3+n-obs), xlim=c(0,1), col="red", lty=1,lwd=2, ylab="density", add =T)
+
+legend(0.1, 3, c( "Stan Posterior", "Analytical Posterior"), 
+  c("blue","red" ), lty=c(1,2),lwd=c(1,1), cex=0.8)
+```
