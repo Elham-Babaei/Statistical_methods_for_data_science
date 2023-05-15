@@ -1,0 +1,266 @@
+---
+title: "Homework 1"
+author: 'Group C: Ferfoglia Irene, Berti Michele, Fodor Imola, Babaei Elham '
+output:
+  pdf_document:
+    toc: yes
+    toc_depth: '3'
+  html_document:
+    toc: yes
+    toc_depth: 3
+---
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Core Statistics: Chapter 1 
+
+### 1.1
+Exponential random variable, $X \ge 0$, has p.d.f. $f (x) = \lambda \exp(-\lambda x)$.  
+**1. Find the c.d.f. and the quantile function for $X$.**
+$$F(x_0)=Pr(X \le x_0)= \int_0^{x_0} \lambda e^{- \lambda x} \ dx = \bigg[- \lambda \frac{e^{-\lambda x}}{\lambda}\bigg]_0^{x_0}= 1-e^{-\lambda x_0} $$ 
+$$\begin{align}p&=1-e^{-\lambda x_0} \\ 1-p&= e^{-\lambda x_0} \\ \ln(1-p)&=-\lambda x_0 \\ -\frac{ln(1-p)}{\lambda}&=x_0=F^{-1}(p)=Q(p)\end{align}$$
+**2. Find $Pr(X < \lambda)$ and the median of $X$.**  
+$$ Pr(X \le \lambda)=F(\lambda)=1-e^{-\lambda^2}$$ 
+$$Q(0.5)=-\frac{ln(0.5)}{\lambda}=\frac{ln(2)-\ln(1)}{\lambda}=\frac{ln(2)}{\lambda}$$
+**3. Find the mean and variance of $X$.**
+$$E(X)=\int_0^{+ \infty} x \, f(x) \ dx = \int_0^{+ \infty}\lambda x \,  e^{-\lambda x} \ dx = \bigg[ \frac{e^{-\lambda x}(\lambda x-1)}{\lambda}\bigg]_0^{+\infty}= \frac{1}{\lambda}$$
+$$E(X^2)=\int_0^{+ \infty} x^2 \, f(x) \ dx = \int_0^{+ \infty}\lambda x^2 \,  e^{-\lambda x} \ dx = \bigg[ \frac{e^{-\lambda x}(\lambda^2 x^2 + 2 \lambda x +2)}{\lambda^2}\bigg]_0^{+\infty}= \frac{2}{\lambda^2}$$
+$$var(X)=E(X^2)-E(X)^2= \frac{2}{\lambda^2} -  \frac{1}{\lambda^2}=  \frac{1}{\lambda^2}$$
+
+
+### 1.2
+
+**Evaluate $Pr(X < 0.5, Y < 0.5)$ if $X$ and $Y$ have joint p.d.f.**
+$$f(x,y)= \begin{cases}x+3/2y^2 \quad &\mathbb{if } \ 0<x<1 \ \mathbb{ and } \ 0<y<1 \\ 0 \quad & \mathbb{otherwise} \end{cases}$$
+$$\begin{align} Pr(X<0.5, \ Y<0.5)&= \int_0^{1/2}\int_0^{1/2} x+\frac{3}{2}y^2 \ dx \, dy \\ &= \int_0^{1/2} \bigg[ \frac{x^2}{2}+ \frac{3}{2}xy^2\bigg]_0^{1/2} dy \\ &= \int_0^{1/2} \frac{1}{8}+ \frac{3}{4}y^2 \ dy \\&=\bigg[ \frac{1}{8}y+ \frac{1}{4}y^3\bigg]_0^{1/2} = \frac{3}{32} \approx 0.09375 \end{align} $$
+
+### 1.6  
+**Let X and Y be non-independent random variables, such that $var(X) = σ^2_x$, $var(Y ) = σ^2_y$ and $cov(X, Y ) = σ^2_{xy}$. Using the result from Section 1.6.2, find var(X + Y) and var(X − Y).**
+
+As $X$ and $Y$ are dependent, 
+$$
+\begin{aligned}
+Var(X+Y) &= Var(X) + Var(Y) + 2Cov(X,Y)\\
+&= \sigma^2_x + \sigma^2_y + 2\sigma^2_{xy}
+\end{aligned}
+$$
+$$
+\begin{aligned}
+Var(X-Y) &= Var(X) + Var(Y) - 2Cov(X,Y)\\
+&= \sigma^2_x + \sigma^2_y - 2\sigma^2_{xy}
+\end{aligned}
+$$
+
+
+### 1.8  
+If $\log(X) \sim N(\mu, \sigma^2)$, find the p.d.f. of $X$. 
+$Y=\log(X) \rightarrow X=e^Y$, so $X$ has a lognormal distribution. Since $Y$ has a normal distribution, its p.d.f. is 
+$$f_Y(Y)=\frac{1}{\sqrt{2 \pi}\sigma} \ \exp \bigg( - \frac{1}{2 \sigma^2}(x-\mu)^2\bigg)$$
+so the p.d.f of $X$ is given by $$f_x(x)= f_y(y) \, \bigg| \frac{d \, \log(x)}{dx}\bigg|= \frac{1}{\sqrt{2\pi}\sigma x} exp\left({\frac{-(log(x)- \mu)^2}{2\sigma^2}}\right)$$
+
+## Core Statistics: Chapter 3
+
+### 3.3
+**Rewrite the following, replacing the loop with efficient code:**
+```{r 3.3}
+n <- 10000000; z <- rnorm(n)
+zneg <- 0;j <- 1
+system.time(
+  for (i in 1:n) {
+    if (z[i]<0) {
+      zneg[j] <- z[i] 
+      j <- j + 1
+  }
+})
+```
+**Confirm that your rewrite is faster but gives the same result.**
+
+```{r 3.3 but better}
+system.time({
+zneg2 <- z[z < 0]
+})
+
+sum(zneg != zneg2)
+```
+
+### 3.5 
+Consider solving the matrix equation $Ax=y$ for $x$, where $y$ is a known $n$ vector and $A$ is a known $n \times n$ matrix. The formal solution to the problem is $x=A^{-1}y$, but it is possible to solve the equation directly, without actually forming $A^{-1}$. This question explores the direct solution. Read the help file for `solve` before trying it. 
+
+**A. First create an $A$, $x$ and $y$ satisfying $Ax=y$.**
+```{r}
+set.seed(0); n <- 1000
+A <- matrix(runif(n*n),n,n); 
+x.true <- runif(n) 
+y <- A%*%x.true
+```
+The idea is to experiment with solving $Ax = y$ for $x$, but with a known truth to compare the answer to.
+
+**B. Using `solve`, form the matrix $A^{-1}$ explicitly and then form $x1=A^{-1}y$. Note how long this takes. Also assess the mean absolute difference between `x1` and `x.true` (the apporximate mean absolute error in the solution).**
+
+```{r}
+system.time({
+  A_inv = solve(A) 
+  x1 <- A_inv %*% y
+})
+mean(abs(x.true - x1))
+```
+
+**C. Now use `solve` to directly solve for $x$ without forming $A^{-1}$. Note how long this takes and assess the mean absolute error of the result.**
+
+```{r}
+system.time({
+  x2 <- solve(A, y)
+  }
+)
+mean(abs(x.true - x2))
+```
+
+**D. What do you conclude?**
+
+It is better to solve directly the system calling the solve function, it is more efficient and more precise.
+
+### 3.6
+The empirical cumulative distribution function for a set of measurements ${x_i : i = 1, . . . n}$ is $$\hat F(x)= \frac{\# (x_i<x)}{n}$$ where $\#(xi < x)$ denotes ‘number of $x_i$ values less than $x$’. When answering the following, try to ensure that your code is commented, clearly structured, and tested. To test your code, generate random samples using `rnorm`, `runif`, etc.
+
+**A. Write an R function that takes an unordered vector of observations $x$ and returns the values of the empirical c.d.f. for each value, in the order corresponding to the original $x$ vector. See `sort.int`.**
+
+```{r}
+my_ecdf <- function(x){
+  r <- sort.int(x, index.return = TRUE)
+  x.sorted <- r$x
+  idxs <- r$ix 
+
+  l <- length(x.sorted)
+  m_ecdf <- seq(l)          # just initialize a sequence of length l
+  m_ecdf[idxs] <- (1:l) / l # so that this trick to evaluate the ecdf works
+
+  return(m_ecdf)
+}
+
+```
+
+**B. Modify your function to take an extra argument `plot.cdf`, that when `TRUE` will cause the empirical c.d.f. to be plotted as a step function over a suitable $x$ range.**
+```{r}
+my_ecdf <- function(x, plot.cdf=FALSE){
+  r <- sort.int(x, index.return = TRUE)
+  x.sorted <- r$x
+  idxs <- r$ix 
+
+  l <- length(x.sorted)
+  m_ecdf <- seq(l)          # just initialize a sequence of length l
+  m_ecdf[idxs] <- (1:l) / l # so that this trick to evaluate the ecdf works
+  
+  # plotting the ecdef if required
+  if(plot.cdf){
+    sf = stepfun(x.sorted, (0:l) / l, f=0)
+    plot(sf, main="ECDF", ylab = "ecdf(x)", xlab="x")
+    }
+  
+  return(m_ecdf)
+}
+
+n = 10
+set.seed(0)
+x = runif(n)
+m_ecdf <- my_ecdf(x, plot.cdf=TRUE)
+# checking if it gives the same results of the built-in function
+sum(abs(m_ecdf - ecdf(x)(x)))
+```
+
+## Extra
+**Based on the following data, conduct a hypothesis test to determine if the average age of a certain population of interest is equal to $45$ years:**
+
+```{r}
+age <- c(64, 95, 28, 64, 62, 54, 92, 96, 86, 69, 102, 75, 33, 33,68, 86, 45, 37, 59, 20, 33, 18, 7, 18, 38, 66, 45, 66, 80, 69, 58, 44, 41, 70, 25, 51, 71, 68, 13, 38)
+```
+
+**What is your conclusion about the null hypothesis for $\alpha=0.01$? (check the assumptions of the test).
+Plot the density of the test statistic and highlight the rejection region.**
+
+
+```{r}
+#checking the assumption of normal distribution
+library(fitdistrplus)
+descdist(age, discrete = TRUE)
+fit.norm <- fitdist(age, "norm")
+plot(fit.norm)
+```
+
+```{r}
+# 99% confidence level test
+#defining probability
+alpha = 0.01
+p = 1 - alpha
+#retrieve value <- probability
+c_value = qt(alpha/2, df=39, lower.tail = F)
+print(c_value)
+
+# executing the t test with the built-in function
+r = t.test(age, mu=45, alternative="two.sided",conf.level=p)
+print(r)
+
+
+```
+
+
+By seeing the quantile-quantile plot it seems reasonable to think that the data is normal-distrbuted.
+
+For this reason, the t_test has been used to verify if the data supports the hypotesis $H_0$: $\mu = 45$.
+
+Above it is proven that we got a non-significant result, the p-value is greater than the alpha, hence we are failing to reject the null hypothesis.
+
+Also with the critical value, it being 2.70; and having the rule t<c_value (the distribution we have is symmetrical); we fail to reject the null hypothesis.
+
+```{r}
+
+library(RColorBrewer)
+
+# number of degree of freedom 
+ndf = 39
+
+# defining the quantiles that define the acceptance/rejection region
+a <-  alpha / 2
+b <- 1 - a  
+
+t_interval <- c(qt(a, ndf), qt(b, ndf)) #interval of confidence for the statistcs
+
+# Main plot of density
+curve(dt(x,ndf),xlim=c(-5,5), ylim=c(0,0.4),
+  main="p-value and rejection region", col = "blue", lwd = 2, xlab="x",  ylab=expression(t[ndf]),  yaxs="i")
+
+
+library(RColorBrewer)
+plotclr <- brewer.pal(6,"YlOrRd")
+# Color the area(higher tail)
+start_point <- qt(b, ndf)
+end_point <-  5
+cord.x <- c(start_point,  seq(start_point, end_point, 0.01),  end_point)
+cord.y <- c(0,  dt(seq(start_point, end_point, 0.01), ndf ),  0)
+polygon(cord.x, cord.y, col=plotclr[4], border = NA )
+
+# Color the area(lower tail)
+start_point <- -5
+end_point <-  qt(a, ndf)
+cord.x <- c(start_point,  seq(start_point, end_point, 0.01),  end_point)
+cord.y <- c(0,  dt(seq(start_point, end_point, 0.01), ndf ),  0)
+polygon(cord.x, cord.y, col=plotclr[4], border = NA )
+
+# Plot again because it's covered
+curve(dt(x,ndf),xlim=c(-5,5),main=expression(t[ndf]),  lwd = 2, add = TRUE, yaxs="i")
+
+
+# Vertical line of statistic 
+abline(v =r$statistic, lty=2, lwd=2, col="red")
+
+#Adding some texts
+text (0,0.2, paste("Accept", expression(H_0)))
+text (3.5,0.03, paste("Reject", expression(H_0)))
+text (-3.5,0.03, paste("Reject", expression(H_0)))
+text(as.double(r$statistic)-0.23, 0.015, "t", col="red", cex=1.2)
+
+```
+
