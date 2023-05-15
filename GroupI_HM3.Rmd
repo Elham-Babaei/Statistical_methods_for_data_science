@@ -1,0 +1,718 @@
+---
+title: "Homework 3 Group I"
+author: "Elham Babaei, SICKLINGER MARCO, TINTO BEATRICE, ZINNA ISACCO"
+date: "29/12/2020"
+output:
+  html_document:
+     toc: yes
+institute: University of Trieste
+fontsize: 10pt
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Exercises from *Data Analysis and Graphics Using R*
+
+## Exercise 8 from chapter 6
+**Apply the `lm.ridge()` function to the litters data, using the generalized cross-validation (GCV) criterion to choose the tuning parameter. (GCV is an approximation to cross-validation.)**
+
+- **In particular, estimate the coefficients of the model relating `brainwt` to `bodywt` and `lsize` and compare with the results obtained using `lm()`.**
+```{r, message=FALSE, echo=TRUE}
+library(DAAG)
+library(MASS)
+litters
+#GCV
+select(lm.ridge(brainwt~., data= litters, lambda = seq(0,10,0.001)))
+```
+
+The optimized value of the parameter $\lambda$ is $0.118$. Then we apply *ridge regression*:
+
+```{r}
+#ridge regression with optimized value of lambda
+litters_ridge <- lm.ridge(brainwt~., data=litters, lambda = 0.118)
+litters_ridge
+```
+
+```{r}
+# linear regression
+litters_lm <- lm(brainwt~., data=litters)
+litters_lm
+```
+
+In the ridge regression the coefficients of both `bodywt` and `lsize` are shrinked in favor of the intercept. 
+
+- **Using both ridge and ordinary regression, estimate the mean brain weight when litter size is 10 and body weight is 7. Use the bootstrap, with case-resampling, to compute approximate 95% percentile confidence intervals using each method. Compare with the interval obtained using `predict.lm()`.**
+```{r}
+#95% Confidence Interval (CI) using bootstrap- lm model
+bootsrap_lm <- function(formula, data, B){
+  n <- nrow(data)
+  s_vect <- rep(0, B)
+  for(i in 1:B) {
+    ind <- sample(1:n, n, replace = TRUE)
+    lm.b<-lm(formula, data=data[ind,])
+    s_vect[i] <- coef(lm.b)[1] + coef(lm.b)[2]*10 + coef(lm.b)[3]*7
+  }
+  CI <- quantile(s_vect, prob=c(0.025, 0.975))
+  return(CI)
+}
+#95% Confidence Interval (CI) using bootstrap- ridge model
+bootsrap_ridge <- function(formula, data, B, lambda){
+  n <- nrow(data)
+  s_vect <- rep(0, B)
+  for(i in 1:B) {
+    ind <- sample(1:n, n, replace = TRUE)
+    ridge.b<-lm.ridge(formula, data=data[ind,], lambda=lambda)
+    s_vect[i] <- coef(ridge.b)[1] + coef(ridge.b)[2]*10 + coef(ridge.b)[3]*7
+  }
+  CI <- quantile(s_vect, prob=c(0.025, 0.975))
+  return(CI)
+}
+```
+
+```{r}
+bootsrap_lm (formula=brainwt~., data=litters, B = 1000)
+bootsrap_ridge (formula=brainwt~., data=litters, B = 1000, lambda = 0.118)
+```
+```{r}
+# 95% CI using predict.lm
+fixedvalues <- data.frame(lsize=10, bodywt=7)
+predict.lm(litters_lm, fixedvalues, interval = "confidence")
+
+#coverage <- predict(litters_lm, interval="confidence")
+#freq_coverage <- mean(litters$brainwt >= coverage[,2] & litters$brainwt <= coverage[,3])
+#coverage
+#freq_coverage
+```
+
+We can see that the bootstrap confidence intervals are quite similar for both models. 
+They are also similar to the confidence interval obtained by using the `predict.lm` built-in function.
+
+
+## Exercise 10 from chapter 6
+- **Construct a scatterplot of `y` (mpg) versus `x1` (displacement). Is the relationship between these variables non-linear?** 
+```{r, echo=TRUE}
+library(MPV)
+table.b3
+plot(table.b3$x1, table.b3$y, xlab = "displacement", ylab = "mpg")
+```
+
+Yes, the relationship between `mpg` and `displacement` seems to be nonlinear.
+
+- **Use the `xyplot()` function, and `x11` (type of transmission) as a `group` variable. Is a linear model reasonable for these data? **
+```{r, echo=TRUE}
+xyplot(y ~ x1, groups = x11, auto.key = TRUE, data = table.b3,  type = c("p", "r"), xlab = "displacement", ylab = "mpg", main = "'Miles/gallon' versus 'displacement'\n grouped by the type of transmission\n (0: manual and 1: automatic)")
+```
+
+The graph shows that for each group a linear model seems reasonable. However, it is nonlinear when the types of transmission is not distinguished.
+
+- **Fit the model relating `y` to `x1` and `x11` which gives two lines having possibly different slopes and intercepts. Check the diagnostics. Are there any influential observations? Are there any influential outliers?**
+```{r, echo=TRUE}
+model <- lm(y ~ x1 * x11, data = table.b3)
+summary(model)
+par(mfrow=c(2,2))
+plot(model)
+```
+
+The *Residual vs Leverage* plot shows that observation 5 is an influential observation as it is located outside of the `Cook's Distance` line. But other plots don't show strong evidence that it is an outlier.
+
+- **(d) Plot the residuals against the variable `x7` (number of transmission speeds), again using `x11` as a `group` variable. Is there anything striking about this plot?**
+```{r, echo=TRUE}
+#Plot residuals against x7
+xyplot(model$residuals ~ x7, groups = x11, data=table.b3, auto.key=TRUE , xlab = "Number of transmission speeds",ylab = "Residuals", main = "'Residuals' versus 'number of transmission speeds'\n grouped by the type of transmission\n (0: manual and 1: automatic)")
+```
+
+It is clear that the two groups are almost perfectly separated except one blue point which is included among pink points.By looking at the dataset, we find out that this point corresponds to observation 5 which is the only car with the number of transmission speeds equal to 3 ($X7=3$) and manual transmission ($X11=0$).
+
+## Exercise 5 from chapter 7
+**The data frame cuckoos holds data on the lengths and breadths of eggs of cuckoos, found in the nests of six different species of host birds.**
+```{r }
+library(DAAG)
+summary(cuckoos)
+```
+
+**Fit models for the regression of length on breadth that have:**
+
+- **a single line for all six species.**
+``` {r , echo=TRUE}
+#a single line for all six species
+lm.single <- lm(length ~ breadth, data=cuckoos)
+summary(lm.single)
+
+plot(cuckoos$breadth, cuckoos$length, pch = 20, ylim=c(19,25), ylab = "length", xlab = "breadth")
+curve(predict(lm.single, data.frame(breadth=x)), add=TRUE, col="red")
+```
+
+- **different parallel lines for the different host species.**
+``` {r , echo=TRUE}
+#different parallel lines for the different host species
+lm.parallel <- lm(length ~ breadth + species, cuckoos)
+summary(lm.parallel)
+
+plot(cuckoos$breadth[c(1:45)], cuckoos$length[c(1:45)], col = "red", ylab="length", xlab="breadth")
+points(cuckoos$breadth[c(46:60)], cuckoos$length[c(46:60)], col = "blue")
+points(cuckoos$breadth[c(61:74)], cuckoos$length[c(61:74)], col = "green")
+points(cuckoos$breadth[c(75:90)], cuckoos$length[c(75:90)], col = "yellow")
+points(cuckoos$breadth[c(91:105)], cuckoos$length[c(91:105)], col = "black")
+points(cuckoos$breadth[c(106:120)], cuckoos$length[c(106:120)], col = "violet")
+coefs <- coef(lm.parallel)
+curve(coefs[1]+coefs[2]*x+coefs[3],col="red",add=T)
+curve(coefs[1]+coefs[2]*x+coefs[6],col="blue",add=T)
+curve(coefs[1]+coefs[2]*x,col="green",add=T)
+curve(coefs[1]+coefs[2]*x+coefs[5],col="yellow",add=T)
+curve(coefs[1]+coefs[2]*x+coefs[4],col="black",add=T)
+curve(coefs[1]+coefs[2]*x+coefs[7],col="violet",add=T)
+```
+
+- **separate lines for the separate host species.**
+``` {r , echo=TRUE}
+#separate lines for the separate host species
+lm.separate <- lm(length ~ breadth + species+ breadth:species, cuckoos)
+summary(lm.separate)
+
+xyplot(length ~ breadth, data = cuckoos, xlab = "breadth", ylab = "length", groups = species, type=c("p","r"), auto.key = TRUE, main = "")
+
+```
+
+**Use the anova() function to print out the sequential analysis of variance table. Which of the three models is preferred? Print out the diagnostic plots for this model. Do they show anything worthy of note? Examine the output coefficients from this model carefully, and decide whether the results seem grouped by host species. How might the results be summarized for reporting purposes?**
+``` {r , echo=TRUE}
+#ANOVA
+anova(lm.single, lm.parallel, lm.separate)
+
+```
+
+The accepted model is the parallel one. Because the reduction in the residual sum of square from model `lm.parallel` to model `lm.separate` in the analysis of variance table has a p-value equal to 0.3182 which is large enough; so there is not enough evidence against the null hypothesis which is parallel model. 
+
+``` {r , echo=TRUE}
+#diagnostic plots for parallel model
+par(mfrow=c(2,2))
+plot(lm.parallel)
+```
+
+The diagnostic plots seem unexceptional. The coefficients of the parallel model show that the species `pied.wagtail`, `robin `, and `tree.pipit` does not have a significant effect on the intercept (due to large p-values). The plot also shows they have very close fitted lines; therefore they can be grouped as one specie along with the other two groups for reporting purposes.
+
+## Exercise 7 from chapter 7
+**Apply polynomial regression to the seismic timing data in the data frame geophones. Specifically, check the fits of linear, quadratic, cubic, and quartic (degree = 4) polynomial estimates of the expected thickness as a function of distance. What do you observe about the fitted quartic curve? Do any of the fitted curves capture the curvature of the data in the region where distance is large?**
+``` {r , echo=TRUE}
+library(DAAG)
+summary(geophones)
+
+plot(thickness ~ distance, data=geophones)
+```  
+
+The plot shows that the relationship between thickness and distance is not linear.
+
+``` {r , echo=TRUE}
+#linear
+#lm1 <- lm(thickness ~ distance, data=geophones)
+lm1 <- lm(thickness ~ poly(distance, 1), data = geophones)
+summary(lm1)
+
+#quadratic
+#lm2 <- lm(thickness ~ distance+I(distance^2), data= geophones)
+lm2 <- lm(thickness ~ poly(distance, 2), data = geophones)
+summary(lm2)
+
+#cubic
+#lm3 <- lm(thickness ~ distance+I(distance^2)+ I(distance^3), data= geophones)
+lm3 <- lm(thickness ~ poly(distance, 3), data = geophones)
+summary(lm3)
+
+#quartic
+#lm4 <- lm(thickness ~ distance+I(distance^2)+ I(distance^3) + I(distance^4), data= geophones)
+lm4 <- lm(thickness ~ poly(distance, 4), data = geophones)
+summary(lm4)
+```  
+
+``` {r , echo=TRUE}
+anova(lm1,lm2,lm3,lm4)
+AIC(lm1,lm2,lm3,lm4)
+``` 
+
+``` {r , echo=TRUE}
+library(ggplot2)
+ggplot(geophones, aes(distance, thickness) ) + stat_smooth(method = lm, formula = y ~ poly(x, 1, raw = TRUE)) + stat_smooth(method = lm, formula = y ~ poly(x, 2, raw = TRUE), col="red") + stat_smooth(method = lm, formula = y ~ poly(x, 3, raw = TRUE), col="green") + stat_smooth(method = lm, formula = y ~ poly(x, 4, raw = TRUE), col="yellow") + geom_point()
+
+
+``` 
+
+According to the summary of the fitted models, Anova test, AIC, and the plots, we can see the polynomial of degree 4 is the best choice among the four models. However, none of the fitted curves capture the curvature of the data in the region where distance is large.\
+Also, increasing the degree of the polynomial is not a good idea cause it can lead to over-fitting. So it is better to use other models such as Generalized Additive Models (GAM) 
+
+## Exercise 5 from chapter 11
+**This exercise will compare alternative measures of accuracy from randomForest() runs. First, 16 rows where data (on V6) is missing will be omitted:**
+
+``` {r , echo=TRUE}
+library(randomForest)
+library(MASS)
+sapply(biopsy, function(x)sum(is.na(x)))
+biops <- na.omit(biopsy[,-1]) ## Column 1 is ID
+## Examine list element names in randomForest object
+names(randomForest(class~ ., data=biops))
+
+
+```
+
+- **Compare repeated randomForest() runs:**
+``` {r}
+## Repeated runs, note variation in OOB accuracy.
+for(i in 1:10) {
+biops.rf <- randomForest(class ~ ., data=biops)
+OOBerr <- mean(biops.rf$err.rate[,"OOB"])
+print(paste(i, ": ", round(OOBerr, 4), sep=""))
+print(round(biops.rf$confusion,4))
+}
+
+```
+
+- **Compare OOB accuracies with test set accuracies: plot test set accuracies against OOB accuracies. Add the line y = x to the plot. Is there any consistent difference in the accuracies? Given a random training/test split, is there any reason to expect a consistent difference between OOB accuracy and test accuracy?**
+``` {r}
+
+## Repeated train/test splits: OOB accuracy vs test set accuracy.
+errors <- matrix(0,ncol=2,nrow=10)
+for(i in 1:10){
+trRows <- sample(1:dim(biops)[1], size=round(dim(biops)[1]/2))
+biops.rf <- randomForest(class ~ ., data=biops[trRows, ],
+xtest=biops[-trRows,-10],
+ytest=biops[-trRows,10])
+oobErr <- mean(biops.rf$err.rate[,"OOB"])
+testErr <- mean(biops.rf$test$err.rate[,"Test"])
+print(round(c(oobErr,testErr),4))
+errors[i,] <-c(oobErr,testErr)
+}
+
+errors
+plot(x=errors[,1], y=errors[,2] ,ylab="testErr", xlab="oobErr", xlim=c(0,0.1),ylim = c(0,0.1))
+curve(1*x,col="red",add=T)
+```
+
+The results show that there is no significant difference between OOB error and Test error in random forest because OOB is calculated based on data points which are not included for building trees; therefore it is unseen and plays like test data.
+
+- **Calculate the error rate for the training data: explain why use of the training data for testing leads to an error rate that is zero.**
+
+``` {r}
+randomForest(class ~., data=biops, xtest=biops[,-10],ytest=biops[,10])
+
+```
+
+Using of the training data for testing leads to an error rate that is zero because random forest builds full trees based on the training data that exactly fit the data (overfitting), so there is no error on the training data.
+
+
+
+# Exercise 1
+**The General Social Survey (GSS) has been conducted in the United States every two years since 1972.**
+
+#### Choice of the response variable and treatment of missing values
+The variable chosen from the General Social Survey is the `CAPPUN` variable. It is related to the following question: 
+<div align="center">*Does the respondent favor or oppose the death penalty for persons convicted of murder?*</div>
+The response has been analyzed as a function of the following predictors: age (`AGE`), sex (`SEX`, with levels $1$ and $2$ for "Male" and "Female", respectively), education (`EDUC`) and ethnicity (`RACE`, with levels $1$, $2$ and $3$ for "White", "Black" and "Other", respectively. This variable has been used in place of `ETHNIC`, since the latter has too many levels).\
+The response variable has two levels, coded by default with the numbers $1$, for supporters of the death penalty (Favor), and $2$, for those who oppose this punishment (Oppose). The two levels have been re-scaled to $1$ and $0$, respectively.  
+```{r DATA, echo=T, warning=F, error=F}
+#library(haven)
+#path = file.path("/home/macro/Uni/IyIs/SMDS", "H3", "GSS7218_R3.sav")
+#GSS = read_sav(path)
+
+library(foreign)
+GSS <- read.dta ("GSS7218_R3.dta")
+write.csv(GSS,"D:\\DSSC\\1semester-Courses\\SMDS\\homeworks\\Final-HM3\\GSS7218_R3.csv", row.names = FALSE)
+GSS
+
+data <- GSS[,c("YEAR","AGE","SEX","EDUC","RACE","CAPPUN")]
+
+#data from 1974
+data <- data[(data$YEAR ==1974 | data$YEAR == 1978 | data$YEAR >= 1982),]
+
+# Shift binary variables
+if(!(is.na(data$SEX))) data$SEX <- data$SEX-1
+if(!(is.na(data$CAPPUN))) {
+  data$CAPPUN <- data$CAPPUN-1
+  data$CAPPUN <- -data$CAPPUN+1
+}
+
+data$RACE <- factor(data$RACE, c(1,2,3))
+levels(data$RACE) <- c("White","Black","Other")
+data$SEX <- factor(data$SEX, c(0,1))
+levels(data$SEX) <- c("Male","Female")
+
+summary(data)
+```
+
+It can be immediately noticed that some values of `AGE`, `EDUC` and `CAPPUN` are missing. The missing values of the numeric variables `AGE` and `EDUC` are to be imputed using the mean, which can be computed using the other available data, while those of the categorical variable `CAPPUN` are imputed using the most frequent value present in the available data. However, since it is required to study some quantities (like the proportion of people in favor in the second point of the exercise) over time, it has been checked that, year by year, the frequency of missing values does not exceed the 20$\%$ of the total values.
+```{r FREQ.NA, echo=T}
+# Period over which the variable "CAPPUN" has been studied 
+n.year <- c(1974,1978,1982:1991,1993,1994,1996,1998,2000,2002,2004,2006,2008,2010,2012,2014,2016,2018)
+number.of.years <- length(n.year)
+
+freq.na.AGE <- c()      # Vector of frequencies of AGE's NAs
+freq.na.EDUC <- c()     # Vector of frequencies of EDUC's NAs
+freq.na.CAPPUN <- c()   # Vector of frequencies of CAPPUN's NAs
+
+# Computation of frequencies of missing values
+for(i in 1:number.of.years){
+  n <- nrow(data[data$YEAR == n.year[i],])
+  freq.na.AGE[i] <- sum(is.na(data$AGE[data$YEAR==n.year[i]]))/n
+  freq.na.EDUC[i] <- sum(is.na(data$EDUC[data$YEAR==n.year[i]]))/n
+  freq.na.CAPPUN[i] <- sum(is.na(data$CAPPUN[data$YEAR==n.year[i]]))/n
+}
+
+# Find frequencies that exceed the imposed limit
+too.many.na.AGE <- freq.na.AGE[freq.na.AGE>=0.2]
+too.many.na.AGE
+too.many.na.EDUC <- freq.na.EDUC[freq.na.EDUC>=0.2]
+too.many.na.EDUC
+too.many.na.CAPPUN <- freq.na.CAPPUN[freq.na.CAPPUN>=0.2]
+too.many.na.CAPPUN
+```
+
+One can notice that `AGE` and `EDUC` have few missing values, while `CAPPUN` has too many missing values occurring in three different years. These years are:
+```{r YEAR.NA, echo=T}
+n.year[match(freq.na.CAPPUN[freq.na.CAPPUN>=0.2],freq.na.CAPPUN)]
+```
+
+In these cases, imputing missing values using the most frequent one would invalidate the whole set of data related to a specific year. Therefore, for the above years, the rows associated to missing values has been simply removed (by doing this, one removes also the rows with NA(s) associated with `AGE` and `EDUC`, but this is not a problem since they are few).
+```{r DATA2, echo=T}
+# Remove missing values from data 
+data.2002  <- na.omit(data[data$YEAR==2002,])
+data.2004  <- na.omit(data[data$YEAR==2004,])
+data.2006  <- na.omit(data[data$YEAR==2006,])
+
+# Create dataset where only missing values coming from 2002, 2004 and 2006 are removed
+data.02to06 <- rbind(data.2002,data.2004,data.2006)
+data.74to00 <- data[(data$YEAR>=1974 & data$YEAR<=2000),]
+data.08to18 <- data[data$YEAR>=2008,]
+data <- rbind(data.74to00,data.02to06,data.08to18)
+```
+
+Then, the data has been completed as explained above.
+```{r IMPUTING, echo=T}
+mean_AGE <- round(mean(data$AGE, na.rm = T)+0.5, digits = 0)
+mean_EDUC <- round(mean(data$EDUC, na.rm = T)+0.5, digits = 0)
+cappun_favor <- data$CAPPUN[(!(is.na(data$CAPPUN)) & data$CAPPUN==1)]
+cappun_oppose <- data$CAPPUN[(!(is.na(data$CAPPUN)) & data$CAPPUN==0)]
+
+data$AGE[is.na(data$AGE)] <- mean_AGE
+data$EDUC[is.na(data$EDUC)] <- mean_EDUC
+
+if(length(cappun_favor)>length(cappun_oppose)){
+  data$CAPPUN[is.na(data$CAPPUN)] <- 1
+} else {
+  data$CAPPUN[is.na(data$CAPPUN)] <- 0
+}
+summary(data)
+
+# Save for graphs later 
+data$CAPPUN.BIN <- data$CAPPUN
+```
+
+#### Behavior of `CAPPUN` over time 
+One can give a graph of the average response of the binary response variable `CAPPUN` over time.
+```{r TIME_AVG, echo=T}
+CAPPUN_time.avg <- c()  # Vector containing average response per year
+se <- c()               # Vector of standard error
+
+# Computation of CAPPUN's proportion over time
+for(i in 1:number.of.years){
+  CAPPUN_time.avg[i] <- mean(data$CAPPUN[data$YEAR == n.year[i]],na.rm=T)
+  
+  n <- nrow(data[data$YEAR == n.year[i],])
+  s <- CAPPUN_time.avg[i]*(1-CAPPUN_time.avg[i])
+  se[i] <- sqrt(s/n)
+}
+
+# Plot with standard error bounds
+plot(n.year, CAPPUN_time.avg, xlab = "year", ylab = "avarage response", xlim = c(1970,2020), ylim = c(0,1), pch=16, cex=0.7)
+arrows(x0=n.year, y0=CAPPUN_time.avg-se, x1=n.year, y1=CAPPUN_time.avg+se, code=3, angle=90, length=0.05, col="grey")
+```
+
+From the graph above, one can notice a trend toward an opinion in favor of the capital punishment for those convicted of murder during the first decades in which the survey was conducted, then growing slowing toward the opposite opinion after 2000, but still with the majority of the people in favor of the death penalty.  
+
+#### Logistic regression
+Now, a logistic regression of the response variable `CAPPUN` can be set up, given the four predictors `AGE`, `SEX`, `EDUC` and `RACE`. We start with a model that does not include any interaction between predictors.
+```{r NO.INT, echo=T}
+fit0 <- glm(CAPPUN ~ AGE + SEX + EDUC + RACE, family = binomial(link = "logit"), data = data)
+summary(fit0)
+```
+According to this model, the predictor `AGE` is not statistically significant. This is not surprising, since it is somehow expected that people's opinion on this matter depends on other factors, such as education or the fact of being from different ethnicities, if belonging to some of them results in a higher chance of being punished by death, if murder is committed. \
+One can study the trend of the estimates of the coefficients over time, computing them for each year.
+```{r COEF.vs.TIME, echo=T}
+coefs.ma <- matrix(NA, nrow = number.of.years, ncol = 6)
+SE_coefs.ma <- matrix(NA, nrow = number.of.years, ncol = 6)
+for(i in 1:number.of.years){
+  fit <- glm(CAPPUN ~ AGE + SEX + EDUC + RACE, family = binomial(link = "logit"), data = data[data$YEAR == n.year[i],])
+  coefs.ma[i,] <- fit$coefficients
+  SE_coefs.ma[i,] <- summary(fit)$coefficients[,2]
+}
+
+colnames(coefs.ma) <- c("intercept","coefficient of AGE","coefficient of SEXFemale","coefficient of EDUC","coefficient of RACEBlack","coefficient of RACEOther")
+
+par(mfrow=c(2,3))
+for(i in 2:6){
+  plot(n.year, coefs.ma[,i], ylab = colnames(coefs.ma)[i], xlab = "year",pch=20,cex=.5, ylim =   c(min(coefs.ma[,i]-SE_coefs.ma[,i]),max(coefs.ma[,i]+SE_coefs.ma[,i])))
+  arrows(x0=n.year, y0=coefs.ma[,i]-SE_coefs.ma[,i], x1=n.year, y1=coefs.ma[,i]+SE_coefs.ma[,i], code=3, angle=90, length=0.01, col="grey")
+}
+```
+
+The intercept is interpreted assuming zero values for all the predictors. In this case, it represents the situation in which the respondent is a completely uneducated white male of age zero. Thus, it is not very interesting, reason for which it has not been plotted.\
+It is possible to spot patterns in the trend of some of the predictors' coefficients. We can notice that, globally, the negative association of the coefficient of `EDUC` increases with time, and so does `RACEOther`. On the contrary, positive association of `RACEBlack` and `SEXFemale` increases in the last years. Coefficient of `AGE` at first decreases then sets around zero. 
+
+#### Tree-based classification
+Using the 4 variables `AGE`, `SEX`, `EDUC` and `RACE`, it is possible to built a decision tree that is able to classify each answer, "favor" or "oppose".
+```{r TREE, echo=T}
+library(reshape2)
+library(rpart)
+library(rpart.plot)
+
+# Treat `CAPPUN` as factor
+data$CAPPUN <- factor(data$CAPPUN, levels=c(0, 1))
+levels(data$CAPPUN) <- c("Oppose","Favor")
+
+tree_data <- rpart(CAPPUN ~ AGE + SEX + EDUC + RACE, method="class", data=as.data.frame(data), cp=0.0008)
+plot(tree_data)
+text(tree_data)
+```
+
+We now build the largest tree possible, setting $cp=0$, and then we prune it in order to obtain the best number of splits. First, we check the behavior of the cross validation error.
+```{r CP_STUDY, echo=T}
+tree.largest_data <- rpart(CAPPUN ~ AGE + SEX + EDUC + RACE, method="class", data=as.data.frame(data), cp=0)
+printcp(tree.largest_data)
+```
+
+The plot of the cross validation error against the cp value is the following.
+```{r CP_PLOT, echo=T}
+plotcp(tree.largest_data)
+```
+
+It is possible to notice that the `xerror` has an almost constant behavior for a few iterations and then it increases quite rapidly due to strong over-fitting. A `cptable` like the one obtained above should be interpreted as a warning that the computed tree is of little use because probably it will not be able to generalize on other data. At this point, the best thing to do is to select the tree with the lowest associated cross validation error, because the optimal tree, i.e. the smallest tree with cross validation error lower than the sum of the minimum `xerror` and the associated `xstd`, can be found at the root.\
+The best complexity parameter is given by:
+```{r BEST_CP, echo=T}
+best.cp <- tree.largest_data$cptable[which.min(tree.largest_data$cptable[,"xerror"]),]
+best.cp
+```
+
+Then, the best tree is given by:
+```{r BEST_TREE, echo=T}
+tree.pruned <- prune(tree.largest_data, cp=best.cp[1])
+rpart.plot(tree.pruned, extra=106, box.palette="GnBu",branch.lty=3, shadow.col="gray", nn=TRUE)
+```
+```{r CP_TABLE.BEST, echo=T}
+printcp(tree.pruned)
+```
+In this case, the absolute cross validation error is given by:
+```{r CV.ERR, echo=T}
+cv.err <- min(tree.pruned$cptable[,"xerror"]) * 0.27207
+cv.err
+```
+
+This gives the model an error rate of: 
+```{r ERR.RATE, echo=T}
+cv.err*100
+```
+
+#### Model expansion
+In order to answer social science questions of interest, one can expand the model by adding interactions between the predictors, so that it is possible to analyze the effect of one variable on the others. In order to make the interpretation of the coefficients more clear, `AGE` has been divided by ten, so that variations of the new variable are measured in units of decades, and `EDUC` has been divided by four. The full model is the following. 
+```{r 1.INT, echo=T}
+data$AGE10 <- data$AGE/10
+data$EDUC4 <- data$EDUC/4
+fit.exp <- glm(CAPPUN ~ AGE10 + SEX + EDUC4 + RACE + AGE10:SEX + AGE10:EDUC4 + AGE10:RACE + SEX:EDUC4 + SEX:RACE + EDUC4:RACE, family = binomial(link = "logit"), data = data)
+summary(fit.exp)
+```
+
+From the results above, we understand that `AGE`, `SEX`, the interaction between age and race `AGE:RACE` and the one between sex and education `SEX:EDUC` are not significant. \
+We can give the following interpretation for the coefficients calculated above:
+
+- At the mean value of age, for a male of white "race", adding four years of education results approximately in a $4.9\%$ negative difference in the probability that a person expresses a favorable opinion towards the death penalty.
+```{r COEF_EDUC4, echo=T}
+invlogit <- function (x) {1/(1+exp(-x))}
+
+invlogit(fit.exp$coefficients%*%c(1,mean(data$AGE10),0,mean(data$EDUC4)+1,0,0,mean(data$AGE10)*0,mean(data$AGE10)*(mean(data$EDUC4)+1),mean(data$AGE10)*0,mean(data$AGE10)*0,0*(mean(data$EDUC4)+1),0*0,0*0,(mean(data$EDUC4)+1)*0,(mean(data$EDUC4)+1)*0))-invlogit(fit.exp$coefficients%*%c(1,mean(data$AGE10),0,mean(data$EDUC4),0,0,mean(data$AGE10)*0,mean(data$AGE10)*(mean(data$EDUC4)),mean(data$AGE10)*0,mean(data$AGE10)*0,0*(mean(data$EDUC4)),0*0,0*0,(mean(data$EDUC4))*0,(mean(data$EDUC4))*0))
+```
+
+- At the mean value of education, for a male of white "race", adding a decade to his age results approximately in a $0.33\%$ positive difference difference in the probability that a person expresses a favorable opinion towards the death penalty.
+```{r COEF_AGE10, echo=T}
+invlogit(fit.exp$coefficients%*%c(1,mean(data$AGE10)+1,0,mean(data$EDUC4),0,0,(mean(data$AGE10)+1)*0,(mean(data$AGE10)+1)*mean(data$EDUC4),(mean(data$AGE10)+1)*0,(mean(data$AGE10)+1)*0,0*mean(data$EDUC4),0*0,0*0,mean(data$EDUC4)*0,mean(data$EDUC4)*0))-invlogit(fit.exp$coefficients%*%c(1,mean(data$AGE10),0,mean(data$EDUC4),0,0,mean(data$AGE10)*0,mean(data$AGE10)*(mean(data$EDUC4)),mean(data$AGE10)*0,mean(data$AGE10)*0,0*(mean(data$EDUC4)),0*0,0*0,(mean(data$EDUC4))*0,(mean(data$EDUC4))*0))
+```
+
+One can also ask what happens if sex or race are changed.
+
+- At the mean age and education levels, switching sex corresponds to an approximate $7.3\%$ negative difference in the probability of having a favorable opinion.
+```{r COEF_SEX, echo=T}
+invlogit(fit.exp$coefficients%*%c(1,mean(data$AGE10),1,mean(data$EDUC4),0,0,mean(data$AGE10)*1,mean(data$AGE10)*mean(data$EDUC4),mean(data$AGE10)*0,mean(data$AGE10)*0,1*mean(data$EDUC4),1*0,1*0,(mean(data$EDUC4))*0,(mean(data$EDUC4))*0))-invlogit(fit.exp$coefficients%*%c(1,mean(data$AGE10),0,mean(data$EDUC4),0,0,mean(data$AGE10)*0,mean(data$AGE10)*(mean(data$EDUC4)),mean(data$AGE10)*0,mean(data$AGE10)*0,0*(mean(data$EDUC4)),0*0,0*0,(mean(data$EDUC4))*0,(mean(data$EDUC4))*0))
+```
+
+- At the mean age and education levels, switching from a white man to a black man's opinion corresponds to an approximate $26\%$ negative difference in the probability of having a favorable opinion.
+```{r COEF_RACE1, echo=T}
+invlogit(fit.exp$coefficients%*%c(1,mean(data$AGE10),0,mean(data$EDUC4),1,0,mean(data$AGE10)*0,mean(data$AGE10)*(mean(data$EDUC4)),mean(data$AGE10)*1,mean(data$AGE10)*0,0*(mean(data$EDUC4)),0*1,0*0,(mean(data$EDUC4))*1,(mean(data$EDUC4))*0))-invlogit(fit.exp$coefficients%*%c(1,mean(data$AGE10),0,mean(data$EDUC4),0,0,mean(data$AGE10)*0,mean(data$AGE10)*(mean(data$EDUC4)),mean(data$AGE10)*0,mean(data$AGE10)*0,0*(mean(data$EDUC4)),0*0,0*0,(mean(data$EDUC4))*0,(mean(data$EDUC4))*0))
+```
+
+- At the mean age and education levels, switching from a man of white ethnicity to a man of ethnicity different from "white" and "black" corresponds to an approximate $16\%$ negative difference in the probability of having a favorable opinion.
+```{r COEF_RACE2, echo=T}
+invlogit(fit.exp$coefficients%*%c(1,mean(data$AGE10),0,mean(data$EDUC4),0,1,mean(data$AGE10)*0,mean(data$AGE10)*(mean(data$EDUC4)),mean(data$AGE10)*0,mean(data$AGE10)*1,0*(mean(data$EDUC4)),0*0,0*1,(mean(data$EDUC4))*0,(mean(data$EDUC4))*1))-invlogit(fit.exp$coefficients%*%c(1,mean(data$AGE10),0,mean(data$EDUC4),0,0,mean(data$AGE10)*0,mean(data$AGE10)*(mean(data$EDUC4)),mean(data$AGE10)*0,mean(data$AGE10)*0,0*(mean(data$EDUC4)),0*0,0*0,(mean(data$EDUC4))*0,(mean(data$EDUC4))*0))
+```
+
+```{r GRAPH1, echo=T}
+## Graphing the fitted model
+
+jitter.binary <- function(a, jitt=.05){
+  ifelse (a==0, runif(length(a), 0, jitt), runif(length(a), 1-jitt, 1))
+}
+
+switch.jitter <- jitter.binary(data$CAPPUN.BIN)
+
+plot(data$EDUC, switch.jitter, xlim=c(0,max(data$EDUC)), 
+     xlab="Number of years of education", ylab="Pr (Favorable to death penalty)", 
+     type="n", xaxs="i", yaxs="i", mgp=c(2,.5,0), ylim=c(0,1))
+curve(invlogit(cbind(1, 20/10, 0, x/4, 0, 0, 0*20/10, (20/10)*(x/4), 0*20/10, 0*20/10, 0*x/4, 0, 0, 0*x/4, 0*x/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="red")
+curve(invlogit(cbind(1, 50/10, 0, x/4, 0, 0, 0*50/10, (50/10)*(x/4), 0*50/10, 0*50/10, 0*x/4, 0, 0, 0*x/4, 0*x/4) %*% coef(fit.exp)), lwd=.5, add=TRUE)
+curve(invlogit(cbind(1, 20/10, 1, x/4, 0, 0, 1*20/10, (20/10)*(x/4), 0*20/10, 0*20/10, 1*x/4, 1*0, 1*0, 0*x/4, 0*x/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="orange")
+curve(invlogit(cbind(1, 50/10, 1, x/4, 0, 0, 1*50/10, (50/10)*(x/4), 0*50/10, 0*50/10, 1*x/4, 1*0, 1*0, 0*x/4, 0*x/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="grey")
+points(data$EDUC, jitter.binary(data$CAPPUN.BIN), pch=20, cex=.01)
+text(12, .85, "if AGE = 20 and SEX = 'Male'", adj=0, cex=.8, col="red")
+text(7, .9, "if AGE = 50 and SEX = 'Male'", adj=0, cex=.8)
+text(1, .8, "if AGE = 20 and SEX = 'Female'", adj=0, cex=.8, col="orange")
+text(12, .63, "if AGE = 50 and SEX = 'Female'", adj=0, cex=.8, col="grey")
+
+plot(data$EDUC, switch.jitter, xlim=c(min(data$AGE),max(data$AGE)), 
+     xlab="age", ylab="Pr (Favorable to death penalty)", 
+     type="n", xaxs="i", yaxs="i", mgp=c(2,.5,0), ylim=c(0,1))
+curve(invlogit(cbind(1, x/10, 0, (mean(data$EDUC)-4)/4, 0, 0, 0*x/10, (x/10)*((mean(data$EDUC)-4)/4), 0*x/10, 0*x/10, 0*(mean(data$EDUC)-4)/4, 0, 0, 0*(mean(data$EDUC)-4)/4, 0*(mean(data$EDUC)-4)/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="red")
+curve(invlogit(cbind(1, x/10, 1, (mean(data$EDUC)-4)/4, 0, 0, 1*x/10, (x/10)*((mean(data$EDUC)-4)/4), 0*x/10, 0*x/10, 1*(mean(data$EDUC)-4)/4, 1*0, 1*0, 0*(mean(data$EDUC)-4)/4, 0*(mean(data$EDUC)-4)/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="orange")
+curve(invlogit(cbind(1, x/10, 0, (mean(data$EDUC)+4)/4, 0, 0, 0*x/10, (x/10)*((mean(data$EDUC)+4)/4), 0*x/10, 0*x/10, 0*(mean(data$EDUC)+4)/4, 0, 0, 0*(mean(data$EDUC)+4)/4, 0*(mean(data$EDUC)+4)/4) %*% coef(fit.exp)), lwd=.5, add=TRUE)
+curve(invlogit(cbind(1, x/10, 1, (mean(data$EDUC)+4)/4, 0, 0, 1*x/10, (x/10)*((mean(data$EDUC)+4)/4), 0*x/10, 0*x/10, 1*(mean(data$EDUC)+4)/4, 1*0, 1*0, 0*(mean(data$EDUC)+4)/4, 0*(mean(data$EDUC)+4)/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="grey")
+points(data$AGE, jitter.binary(data$CAPPUN.BIN), pch=20, cex=.01)
+text(25, .9, "if EDUC = 9 and SEX = 'Male'", adj=0, cex=.8, col="red")
+text(65, .83, "if EDUC = 17 and SEX = 'Male'", adj=0, cex=.8)
+text(65, .73, "if EDUC = 9 and SEX = 'Female'", adj=0, cex=.8, col="orange")
+text(25, .64, "if EDUC = 17 and SEX = 'Female'", adj=0, cex=.8, col="grey")
+
+
+```
+
+```{r GRAPH2, echo=T}
+## Graphing the fitted model
+
+plot(data$EDUC, switch.jitter, xlim=c(0,max(data$EDUC)), 
+     xlab="Number of years of education", ylab="Pr (Favorable to death penalty)", 
+     type="n", xaxs="i", yaxs="i", mgp=c(2,.5,0), ylim=c(0,1))
+curve(invlogit(cbind(1, 20/10, 0, x/4, 0, 0, 0*20/10, (20/10)*(x/4), 0*20/10, 0*20/10, 0*x/4, 0, 0, 0*x/4, 0*x/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="green")
+curve(invlogit(cbind(1, 20/10, 0, x/4, 1, 0, 0*20/10, (20/10)*(x/4), 1*20/10, 0*20/10, 0*x/4, 0*1, 0*0, 1*x/4, 0*x/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="blue")
+curve(invlogit(cbind(1, 20/10, 0, x/4, 0, 1, 0*20/10, (20/10)*(x/4), 0*20/10, 1*20/10, 0*x/4, 0*0, 0*1, 0*x/4, 1*x/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="violet")
+points(data$EDUC, jitter.binary(data$CAPPUN.BIN), pch=20, cex=.01)
+text(1, .81, "if AGE = 20, SEX = 'Male', RACE = 'White'", adj=0, cex=.8, col="green")
+text(7, .48, "if AGE = 20, SEX = 'Male', RACE = 'Black'", adj=0, cex=.8, col="blue")
+text(6, .68, "if AGE = 20, SEX = 'Male', RACE = 'Other'", adj=0, cex=.8, col="violet")
+
+plot(data$EDUC, switch.jitter, xlim=c(min(data$AGE),max(data$AGE)), 
+     xlab="age", ylab="Pr (Favorable to death penalty)", 
+     type="n", xaxs="i", yaxs="i", mgp=c(2,.5,0), ylim=c(0,1))
+curve(invlogit(cbind(1, x/10, 0, (mean(data$EDUC))/4, 0, 0, 0*x/10, (x/10)*((mean(data$EDUC))/4), 0*x/10, 0*x/10, 0*(mean(data$EDUC))/4, 0, 0, 0*(mean(data$EDUC))/4, 0*(mean(data$EDUC))/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="green")
+curve(invlogit(cbind(1, x/10, 0, (mean(data$EDUC))/4, 1, 0, 0*x/10, (x/10)*((mean(data$EDUC))/4), 1*x/10, 0*x/10, 0*(mean(data$EDUC))/4, 0*1, 0*0, 1*(mean(data$EDUC))/4, 0*(mean(data$EDUC))/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="blue")
+curve(invlogit(cbind(1, x/10, 0, (mean(data$EDUC))/4, 0, 1, 0*x/10, (x/10)*((mean(data$EDUC))/4), 0*x/10, 1*x/10, 0*(mean(data$EDUC))/4, 0*0, 0*1, 0*(mean(data$EDUC))/4, 1*(mean(data$EDUC))/4) %*% coef(fit.exp)), lwd=.5, add=TRUE, col="violet")
+points(data$AGE, jitter.binary(data$CAPPUN.BIN), pch=20, cex=.01)
+text(25, .84, "if EDUC = 13, SEX = 'Male', RACE = 'White'", adj=0, cex=.8, col="green")
+text(50, .53, "if EDUC = 13, SEX = 'Male', RACE = 'Black'", adj=0, cex=.8, col="blue")
+text(50, .63, "if EDUC = 13,SEX = 'Male', RACE = 'Other'", adj=0, cex=.8, col="violet")
+```
+
+Also from the plots above, we can deduce that the variable `AGE` does not play an important role, as expected.
+
+# Exercise 2
+**The file risky_behaviors.dta contains data from a randomized trial targeting couples at high risk of HIV infection. The intervention provided counseling sessions regarding practices that could reduce their likelihood of contracting HIV. Couples were randomized either to a control group (women_alone = no woman counselling and *couples = no couple counselling), a group in which just the woman participated (women_alone = only woman counselling and couples = no couple counselling), or a group in which both members of the couple participated (women_alone = no woman counselling and couples = couple counselling). Some variables are collected at the beginning of the study:**\
+- **sex the gender of the interviewed member of the couple that reported sex acts;**\
+- **bs_hiv if the interviewed member was HIV-positive before the study;**\ 
+- **bupacts the number of unprotected sex acts before the study. One of the outcomes examined after three months was “number of unprotected sex acts at the end of the study” fupacts.**\
+**Model this outcome as a function of treatment assignment using a Poisson regression. Does the model fit well? Is there evidence of overdispersion?**
+
+``` {r ex2, echo= TRUE}
+#load the data and set up for the analysis
+library(foreign)
+data <- read.dta("risky_behaviors.dta")
+#data
+data$couples <- factor(data$couples) ## counselling session to couples
+levels(data$couples) <-  c("no couple counselling", "couple conselling")
+data$women_alone <- factor(data$women_alone) ## counselling session only to women
+levels(data$women_alone) <-  c("no woman counselling","only woman counselling")
+data$fupacts <- round(data$fupacts)
+#data
+summary(data)
+
+```
+
+``` {r}
+#looking at the data
+risky <- data
+risky2 <- data
+
+risky2$sex <- ifelse(risky2$sex == "woman",1,0)
+risky2$bs_hiv <- ifelse(risky2$bs_hiv == "positive",1,0)
+risky2$couples <- ifelse(risky2$couples == "couple conselling",1,0)
+risky2$women_alone <- ifelse(risky2$women_alone == "only woman counselling",1,0)
+risky2
+library(PerformanceAnalytics)
+chart.Correlation(risky2[, c("sex", "couples", "women_alone", "bs_hiv", "bupacts", "fupacts")])
+
+xyplot(fupacts ~ bs_hiv, groups=sex, data=risky, auto.key = TRUE, main="Number of unprotected sex acts at the end of the study\n Considering positive or negative HIV test for interviewd member")
+
+plot(risky$fupacts~risky$bs_hiv, ylab="fupacts", xlab="bs_hiv", col="lightblue")
+plot(risky$fupacts ~ risky$bupacts, xlab="bupacts", ylab = "fupacts", pch=20)
+```
+
+``` {r ,echo=TRUE}
+#treatment
+risky.glm1 <- glm(fupacts ~ couples+women_alone, family = poisson, data=risky )
+summary(risky.glm1)
+par(mfrow=c(1,2))
+plot(risky.glm1, which=c(1,3))
+
+
+#standardized residuals (the same pearson residuals in poisson)
+
+risky.coef <- risky.glm1$coefficients
+risky$mu <- risky.glm1$fitted.values
+#risky$mu <- exp(risky.coef[1] + risky.coef[2]*risky$couples + risky.coef[3]*risky$women_alone+)  #inverse of link function, but first change the factors to dummy variable
+risky$std.residual <- (risky$fupacts-risky$mu)/sqrt(risky$mu)
+plot(risky$std.residual~risky$mu, ylab="standardized residuals", xlab="fitted values", ylim=c(-10,60))
+abline(h=-1.96, col="red")
+abline(h=1.96, col="red")
+```
+
+The plots of residuals show that this models doesn't fit well and there is significant evidence of overdispersion because many residual points are out of the interval [-1.96,1.96] which is the range of standard normal distribution.
+
+**Next extend the model to include pre-treatment measures of the outcome and the additional pre-treatment variables included in the dataset. Does the model fit well? Is there evidence of overdispersion?**
+``` {r ,echo=TRUE}
+#including pre-treatment variables
+risky.glm2 <- glm(fupacts ~ sex+couples+women_alone+bs_hiv+bupacts, family = poisson, data=risky )
+summary(risky.glm2)
+par(mfrow=c(1,2))
+plot(risky.glm2, which=c(1,3))
+
+#standardized residuals (the same pearson residuals in poisson)
+risky.coef <- risky.glm2$coefficients
+risky$mu <- risky.glm2$fitted.values
+risky$std.residual <- (risky$fupacts-risky$mu)/sqrt(risky$mu)
+plot(risky$std.residual~risky$mu, ylab="standardized residuals", xlab="fitted values", ylim=c(-14,42))
+abline(h=-1.96, col="red")
+abline(h=1.96, col="red")
+
+```
+
+The above residual plots show that the model doesn't fit well and there is evidence of overdispersion. 
+
+**Fit a negative binomial (overdispersed Poisson) model. What do you conclude regarding effectiveness of the intervention?**
+``` {r nb,echo=TRUE}
+#negative binomial model
+library(MASS)
+risky.nb <- glm.nb(fupacts ~ sex+couples+women_alone+bs_hiv+bupacts, data=risky, link = log)
+summary(risky.nb)
+par(mfrow=c(1,2))
+plot(risky.nb, which=c(1,3))
+
+```
+
+The result of the model shows that couple counseling  is not highly significant. That means counseling both members of the couple will not make a significant change in the number of their unprotected sex acts.
+
+**These data include responses from both men and women from the participating couples. Does this give you any concern with regard to our modeling assumptions?**\
+The factor "sex" is not statistically significant in the model, so it doesn't matter which member of each couple has been interviewed.
+
+
+
